@@ -2,7 +2,7 @@ import numpy as np
 from PIL import Image
 import torch
 from torch import nn, optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from vqvae import VQVAE
 import matplotlib.pyplot as plt
@@ -19,7 +19,7 @@ model_args = {
     "num_residual_layers": 2,
     "num_residual_hiddens": 32,
     "embedding_dim": 64,
-    "num_embeddings": 512,
+    "num_embeddings": 128,
     "use_ema": use_ema,
     "decay": 0.99,
     "epsilon": 1e-5,
@@ -97,7 +97,7 @@ for epoch in range(epochs):
     print(f"===> Epoch [{epoch+1}/{epochs}] Loss: {running_loss/len(train_loader):.4f}")
 
     # Save checkpoint
-    torch.save(model.state_dict(), f"./checkpoints/vqvae_epoch_{epoch+1}.pt")
+torch.save(model.state_dict(), f"./checkpoints/vqvae.pt")
 
 
 model.eval()
