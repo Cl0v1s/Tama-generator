@@ -45,7 +45,7 @@ train_loader = DataLoader(
 )
 
 # === TRAINING SETUP ============================================================
-epochs = 200
+epochs = 600
 learning_rate = 1e-3
 
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
