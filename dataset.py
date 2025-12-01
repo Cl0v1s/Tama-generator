@@ -7,5 +7,5 @@ class IndexDataset(data.Dataset):
     def __len__(self):
         return len(self.indices)
     def __getitem__(self, idx):
-        return self.indices[idx]
-
+        x = self.indices[idx]           # shape [1,H*W]
+        return torch.LongTensor(x[0])  # supprime le premier axe → [H*W]

@@ -19,7 +19,7 @@ model_args = {
     "num_residual_layers": 2,
     "num_residual_hiddens": 32,
     "embedding_dim": 64,
-    "num_embeddings": 10,
+    "num_embeddings": 512,
     "use_ema": use_ema,
     "decay": 0.99,
     "epsilon": 1e-5,
@@ -45,7 +45,7 @@ train_loader = DataLoader(
 )
 
 # === TRAINING SETUP ============================================================
-epochs = 600
+epochs = 400
 learning_rate = 1e-3
 
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
