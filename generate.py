@@ -13,13 +13,13 @@ model_args = {
     "num_residual_layers": 2,
     "num_residual_hiddens": 32,
     "embedding_dim": 64,
-    "num_embeddings": 512,
+    "num_embeddings": 128,
     "use_ema": use_ema,
     "decay": 0.99,
     "epsilon": 1e-5,
 }
 
-def generate_image(pixelcnn, vqvae, H_prime=8, W_prime=8, num_embeddings=512, device='cuda'):
+def generate_image(pixelcnn, vqvae, H_prime=8, W_prime=8, device='cuda'):
     """
     Génère une image à partir du PixelCNN + VQ-VAE.
 
@@ -27,7 +27,6 @@ def generate_image(pixelcnn, vqvae, H_prime=8, W_prime=8, num_embeddings=512, de
         pixelcnn : modèle PixelCNN entraîné
         vqvae : VQ-VAE entraîné
         H_prime, W_prime : taille des codes latents
-        num_embeddings : nombre d'embeddings du VQ-VAE
         device : 'cuda' ou 'cpu'
 
     Returns:
@@ -58,15 +57,15 @@ def generate_image(pixelcnn, vqvae, H_prime=8, W_prime=8, num_embeddings=512, de
         return image_recon[0]  # [3,H,W]
 
 vqvae = VQVAE(**model_args).to(device)
-vqvae.load_state_dict(torch.load("./vae/checkpoints/vqvae_epoch_400.pt", map_location=device))
-pixelcnn = PixelCNN(num_embeddings=vqvae.vq.num_embeddings, hidden=model_args["num_hiddens"], kernel_size=7, n_layers=7)
+vqvae.load_state_dict(torch.load("./vae/checkpoints/vqvae.pt", map_location=device))
+pixelcnn = PixelCNN(num_embeddings=vqvae.vq.num_embeddings)
 pixelcnn.load_state_dict(torch.load("./checkpoints/pixelcnn.pt", map_location=device))
 
 pixelcnn.to(device)
 vqvae.to(device)
 
 # Génération
-image = generate_image(pixelcnn, vqvae, H_prime=8, W_prime=8, num_embeddings=512, device=device)
+image = generate_image(pixelcnn, vqvae, H_prime=8, W_prime=8, device=device)
 
 to_pil = ToPILImage()
 pil_image = to_pil(image.cpu())
