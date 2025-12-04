@@ -16,8 +16,7 @@ class Tamadataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        img_name = self.paths[idx]
-        image = Image.open(self.paths[idx]).convert("RGB")
+        image = Image.open(self.paths[idx]).convert("L")
 
         if self.transform:
             image = self.transform(image)
