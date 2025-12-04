@@ -3,29 +3,28 @@ import torch.nn as nn
 
 
 class VQVAE(nn.Module):
-    def __init__(self):
+    def __init__(self, num_embeddings, embedding_dim, downsampling, commitment_loss):
         super(VQVAE, self).__init__()
         self.encoder = nn.Sequential(
-            nn.Conv2d(1, 16, 4, stride=2, padding=1),
+            nn.Conv2d(1, 16, 4, stride=downsampling, padding=1),
             nn.BatchNorm2d(16),
             nn.ReLU(),
-            nn.Conv2d(16, 4, 4, stride=2, padding=1),
+            nn.Conv2d(16, 4, 4, stride=downsampling, padding=1),
             nn.BatchNorm2d(4),
             nn.ReLU(),
         )
         
-        self.pre_quant_conv = nn.Conv2d(4, 2, kernel_size=1)
-        self.embedding = nn.Embedding(num_embeddings=3, embedding_dim=2)
-        self.post_quant_conv = nn.Conv2d(2, 4, kernel_size=1)
+        self.pre_quant_conv = nn.Conv2d(4, embedding_dim, kernel_size=1)
+        self.embedding = nn.Embedding(num_embeddings=num_embeddings, embedding_dim=embedding_dim)
+        self.post_quant_conv = nn.Conv2d(embedding_dim, 4, kernel_size=1)
         
-        # Commitment Loss Beta
-        self.beta = 0.2
+        self.beta = commitment_loss
         
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(4, 16, 4, stride=2, padding=1),
+            nn.ConvTranspose2d(4, 16, 4, stride=downsampling, padding=1),
             nn.BatchNorm2d(16),
             nn.ReLU(),
-            nn.ConvTranspose2d(16, 1, 4, stride=2, padding=1),
+            nn.ConvTranspose2d(16, 1, 4, stride=downsampling, padding=1),
             nn.Tanh(),
         )
         

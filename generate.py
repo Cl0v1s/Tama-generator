@@ -1,72 +1,62 @@
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-from pixelcnn import PixelCNN
+from torch.utils.data import DataLoader, TensorDataset
+from torch import optim
+from pixelcnn import GatedPixelCNN
 from vae.vqvae import VQVAE
-from torchvision.transforms import ToPILImage
+from vae.dataset import Tamadataset
+from torchvision import transforms
+import matplotlib.pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-use_ema = True
+
+batch_size = 64
+epochs = 10
+
 model_args = {
-    "in_channels": 3,
-    "num_hiddens": 128,
-    "num_downsampling_layers": 2,
-    "num_residual_layers": 2,
-    "num_residual_hiddens": 32,
-    "embedding_dim": 64,
-    "num_embeddings": 128,
-    "use_ema": use_ema,
-    "decay": 0.99,
-    "epsilon": 1e-5,
+    "in_channels": 1,        # MNIST grayscale
+    "hidden_channels": 128,
+    "embedding_dim": 76,     
+    "num_embeddings": 56,    
+    "commitment_cost": 0.1,
 }
+H_prime = W_prime = 7
 
-def generate_image(pixelcnn, vqvae, H_prime=8, W_prime=8, device='cuda'):
-    """
-    Génère une image à partir du PixelCNN + VQ-VAE.
-
-    Args:
-        pixelcnn : modèle PixelCNN entraîné
-        vqvae : VQ-VAE entraîné
-        H_prime, W_prime : taille des codes latents
-        device : 'cuda' ou 'cpu'
-
-    Returns:
-        image: tensor [C,H,W] dans [0,1]
-    """
-    pixelcnn.eval()
-    vqvae.eval()
-    
-    with torch.no_grad():
-        # Tensor vide pour stocker les indices latents
-        generated_codes = torch.zeros(1, H_prime, W_prime, dtype=torch.long, device=device)
-        
-        # Génération autoregressive pixel par pixel
-        for i in range(H_prime):
-            for j in range(W_prime):
-                logits = pixelcnn(generated_codes)  # [1, num_embeddings, H', W']
-                probs = F.softmax(logits[:, :, i, j], dim=1)  # probabilité du pixel courant
-                # échantillonnage
-                sampled_pixel = torch.multinomial(probs.squeeze(0), 1)
-                generated_codes[0, i, j] = sampled_pixel
-
-        # Convertir les codes en embeddings et décoder
-        embeddings = vqvae.vq.e_i_ts.transpose(0, 1)[generated_codes]  # [1,H',W',D]
-        embeddings = embeddings.permute(0, 3, 1, 2)  # [1,D,H',W']
-        image_recon = vqvae.decoder(embeddings)  # [1,3,H,W]
-        image_recon = torch.sigmoid(image_recon)  # optionnel, si sortie non bornée
-        
-        return image_recon[0]  # [3,H,W]
-
+# === MODELS ================================================================
 vqvae = VQVAE(**model_args).to(device)
 vqvae.load_state_dict(torch.load("./vae/checkpoints/vqvae.pt", map_location=device))
-pixelcnn = PixelCNN(num_embeddings=vqvae.vq.num_embeddings)
+vqvae.eval()  # important
+pixelcnn = GatedPixelCNN(model_args["num_embeddings"], model_args["embedding_dim"]).to(device)
 pixelcnn.load_state_dict(torch.load("./checkpoints/pixelcnn.pt", map_location=device))
 
-pixelcnn.to(device)
-vqvae.to(device)
 
-# Génération
-image = generate_image(pixelcnn, vqvae, H_prime=8, W_prime=8, device=device)
+# ------------------------------
+# 1. Génération de codes avec PixelCNN
+# ------------------------------
+# pixelcnn.generate() doit retourner des indices d'embedding
+codes = pixelcnn.generate(shape=(7, 7), temperature=0.1)
+print("Codes générés:", codes.shape)
 
-to_pil = ToPILImage()
-pil_image = to_pil(image.cpu())
-pil_image.show()
+# ------------------------------
+# 2. Transformer les indices en embeddings
+# ------------------------------
+# VectorQuantizer.embeddings contient la table d'embeddings
+quantized = vqvae.quantizer.embeddings(codes)  # [B, H, W, embedding_dim]
+quantized = quantized.permute(0, 3, 1, 2).contiguous()  # [B, embedding_dim, H, W]
+print("Quantized:", quantized.shape)
+
+# ------------------------------
+# 3. Passer par le décodeur
+# ------------------------------
+images = vqvae.decoder(quantized)  # [B, 3, H_img, W_img]
+print("Images reconstruites:", images.shape)
+
+# ------------------------------
+# 4. Affichage
+# ------------------------------
+img = images[0].cpu().detach().permute(1, 2, 0)  # [H_img, W_img, C]
+# Normalisation de -1..1 -> 0..1
+plt.imshow((img + 1) / 2)  # si sortie du modèle entre -1 et 1
+plt.axis("off")
+plt.show()

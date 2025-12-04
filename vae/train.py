@@ -15,16 +15,15 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # === VQVAE SETUP ============================================================
 batch_size = 256
-epochs = 200
+epochs = 10
 learning_rate = 1e-3
-model_args = {
-    "in_channels": 1,          # RGB images
-    "hidden_channels": 128,    # nombre de filtres cachés dans encoder/decoder
-    "embedding_dim": 64,       # dimension des vecteurs latents
-    "num_embeddings": 3,     # taille du codebook
-    "commitment_cost": 0.35,   # facteur pour la loss de commitment
-}
-model = VQVAE().to(device)
+
+num_embeddings = 4
+embedding_dim = 2
+downsampling = 2 
+commitment_loss = 0.1
+
+model = VQVAE(num_embeddings, embedding_dim, downsampling, commitment_loss).to(device)
 
 # === DATASET SETUP ============================================================
 
@@ -104,7 +103,7 @@ for epoch in range(epochs):
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
-        total_perplexity += compute_perplexity_from_indices(encoding_indices, 3)
+        total_perplexity += compute_perplexity_from_indices(encoding_indices, num_embeddings)
 
     avg_loss = total_loss / len(train_loader)
     avg_perplexity = total_perplexity / len(train_loader)
@@ -127,7 +126,7 @@ with torch.no_grad():
     # Concaténer tous les indices de tout le dataset
     all_indices = torch.cat(all_indices, dim=0)
 # Compter l'utilisation des codes
-counts = torch.bincount(all_indices, minlength=model_args["num_embeddings"])
+counts = torch.bincount(all_indices, minlength=num_embeddings)
 print("Utilisation des codes:", counts)
 num_codes_used = (counts > 0).sum().item()
 print(f"Nombre de codes uniques utilisés dans le codebook: {num_codes_used}")
@@ -152,7 +151,7 @@ with torch.no_grad():
     out, loss, encoding_indices  = model(images)
     recon_loss = criterion(out, images)
     # Perplexité correcte
-    perplexity = compute_perplexity_from_indices(encoding_indices, 3)
+    perplexity = compute_perplexity_from_indices(encoding_indices, num_embeddings)
 
     print(f"Reconstruction Loss: {recon_loss.item():.4f}, VQ Loss: {loss.item():.4f}, Perplexity: {perplexity:.4f}")
 
