@@ -15,11 +15,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # === VQVAE SETUP ============================================================
 batch_size = 256
-epochs = 10
+epochs = 50
 learning_rate = 1e-3
 
-num_embeddings = 4
-embedding_dim = 2
+num_embeddings = 8
+embedding_dim = 4
 downsampling = 2 
 commitment_loss = 0.1
 
@@ -45,12 +45,14 @@ workers = 0
 transform = transforms.Compose([
     transforms.ToTensor(),
 ])
-train_dataset = datasets.MNIST(
-    root="./data",
-    train=True,
-    download=True,
-    transform=transform,
-)
+# train_dataset = datasets.MNIST(
+#     root="./data",
+#     train=True,
+#     download=True,
+#     transform=transform,
+# )
+train_dataset = Tamadataset('../datasets/general', transform)
+
 
 train_loader = torch.utils.data.DataLoader(
     train_dataset,

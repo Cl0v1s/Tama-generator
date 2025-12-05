@@ -3,60 +3,55 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 from torch import optim
-from pixelcnn import GatedPixelCNN
+from pixelcnn import PixelCNN
 from vae.vqvae import VQVAE
 from vae.dataset import Tamadataset
 from torchvision import transforms
 import matplotlib.pyplot as plt
+from PIL import Image, ImageFilter
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-batch_size = 64
-epochs = 10
+num_embeddings = 8
+embedding_dim = 4
+downsampling = 2 
+commitment_loss = 0.1
 
-model_args = {
-    "in_channels": 1,        # MNIST grayscale
-    "hidden_channels": 128,
-    "embedding_dim": 76,     
-    "num_embeddings": 56,    
-    "commitment_cost": 0.1,
-}
-H_prime = W_prime = 7
-
+H = W = 7
 # === MODELS ================================================================
-vqvae = VQVAE(**model_args).to(device)
+vqvae = VQVAE(num_embeddings, embedding_dim, downsampling, commitment_loss).to(device)
 vqvae.load_state_dict(torch.load("./vae/checkpoints/vqvae.pt", map_location=device))
 vqvae.eval()  # important
-pixelcnn = GatedPixelCNN(model_args["num_embeddings"], model_args["embedding_dim"]).to(device)
+
+pixelcnn = PixelCNN(num_embeddings=num_embeddings, hidden_dim=72, num_layers=14).to(device)
 pixelcnn.load_state_dict(torch.load("./checkpoints/pixelcnn.pt", map_location=device))
 
+device = next(pixelcnn.parameters()).device
+samples = torch.zeros((1, H, W), dtype=torch.long, device=device)
 
-# ------------------------------
-# 1. Génération de codes avec PixelCNN
-# ------------------------------
-# pixelcnn.generate() doit retourner des indices d'embedding
-codes = pixelcnn.generate(shape=(7, 7), temperature=0.1)
-print("Codes générés:", codes.shape)
+for y in range(H):
+    for x in range(W):
+        logits = pixelcnn(samples)   # (1, num_emb, H, W)
+        probs = torch.softmax(logits[0, :, y, x], dim=0)
+        samples[0, y, x] = torch.multinomial(probs, 1)
 
-# ------------------------------
-# 2. Transformer les indices en embeddings
-# ------------------------------
-# VectorQuantizer.embeddings contient la table d'embeddings
-quantized = vqvae.quantizer.embeddings(codes)  # [B, H, W, embedding_dim]
-quantized = quantized.permute(0, 3, 1, 2).contiguous()  # [B, embedding_dim, H, W]
-print("Quantized:", quantized.shape)
+emb = vqvae.embedding(samples)                   # (B, H, W, C)
+emb = emb.permute(0, 3, 1, 2)                  # (B, C, H, W)
+z_q = vqvae.post_quant_conv(emb)
+img = vqvae.decoder(z_q)
 
-# ------------------------------
-# 3. Passer par le décodeur
-# ------------------------------
-images = vqvae.decoder(quantized)  # [B, 3, H_img, W_img]
-print("Images reconstruites:", images.shape)
+# img : Tensor généré par VQ-VAE, shape (1,1,H,W), valeurs [-1,1]
+img_show = img.squeeze(0).squeeze(0).cpu().detach()  # (H,W)
+img_show = (img_show + 1) / 2 * 255  # [0,255] pour PIL
+img_show = img_show.numpy().astype('uint8')
 
-# ------------------------------
-# 4. Affichage
-# ------------------------------
-img = images[0].cpu().detach().permute(1, 2, 0)  # [H_img, W_img, C]
-# Normalisation de -1..1 -> 0..1
-plt.imshow((img + 1) / 2)  # si sortie du modèle entre -1 et 1
-plt.axis("off")
-plt.show()
+# Convertir en image PIL
+pil_img = Image.fromarray(img_show)
+
+# Débruitage avec filtre médian (option la plus simple)
+pil_img = pil_img.filter(ImageFilter.MedianFilter(size=5))
+threshold_value = 180  # tu peux changer ce seuil
+pil_img = pil_img.point(lambda p: 255 if p > threshold_value else 0)
+
+# Afficher l'image débruitée
+pil_img.show()
